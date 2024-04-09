@@ -1,3 +1,5 @@
+import os
+import re
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
@@ -6,6 +8,18 @@ from transformers import SegformerImageProcessor
 import json
 from huggingface_hub import hf_hub_download
 from PIL import Image
+from torch import nn
+from sklearn.metrics import accuracy_score
+import evaluate
+metric = evaluate.load("mean_iou")
+
+# customizable id's
+road_labels = {
+  "0": "not_road",
+  "1": "road",
+}
+road_label2id = {v: k for k, v in road_labels.items()}
+
 
 # load id2label mapping from a JSON on the hub
 # think we might need to adjust the num_labels and the id2label situation to fit out specific case
@@ -17,24 +31,23 @@ label2id = {v: k for k, v in id2label.items()}
 
 # define model
 model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0",
-                                                         num_labels=150,
-                                                         id2label=id2label,
-                                                         label2id=label2id,
+                                                         num_labels=2,
+                                                         id2label=road_labels,
+                                                         label2id=road_label2id,
 )
+
 
 # just kinda testing this out and figuring out if it works
 image = Image.open("/Users/rorybeals/Downloads/Road Identification Data/test/206_sat.jpg")
+png_image = Image.open("/Users/rorybeals/Downloads/Road Identification Data/train/562_mask.png")
 image_processor = SegformerImageProcessor(do_reduce_labels=True)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 pixel_vals = image_processor(image, return_tensors="pt").pixel_values.to(device)
-print(pixel_vals.shape)
 
 # forward pass
 with torch.no_grad():
   outputs = model(pixel_values=pixel_vals)
-
-print(outputs)
 
 # took this from online to help with visualizing the segmentation
 def ade_palette():

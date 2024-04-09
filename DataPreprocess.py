@@ -1,3 +1,6 @@
+# File to setup the image data to fine-tune the 
+
+from collections import defaultdict
 import os
 import re
 import torch
@@ -36,6 +39,10 @@ model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0",
                                                          label2id=road_label2id,
 )
 
+# define the image processor
+image_processor = SegformerImageProcessor(do_reduce_labels=True)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 # this function is supposed to process the png files and encode them with proper values that we can use to retrain the model a bit
 def process_png(filename):
     image = Image.open(filename)
@@ -56,14 +63,16 @@ for file in os.listdir(path):
         jpg_files.append(file)
     else: png_files.append(file)
 
-# define optimizer
-optimizer = torch.optim.AdamW(model.parameters(), lr=0.00006)
-image_processor = SegformerImageProcessor(do_reduce_labels=True)
-# move model to GPU
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
-# tune the model
-model.train()
+# define our training data and labels
+training_images = []
+training_labels = []
+
+data_dict = defaultdict(dict)
+for file in jpg_files:
+    num, type_ = file.split('_')
+    data_dict[num][type_] = file
+
+
 for file in jpg_files:
     # find the proper .png file
     match = re.match(r'^(\d+)', file)
@@ -77,25 +86,42 @@ for file in jpg_files:
     png_file = "/Users/rorybeals/Downloads/Road Identification Data/train/" + png_file
     image = Image.open(file)
     pixel_vals = image_processor(image, return_tensors="pt").pixel_values.to(device)
+    training_images.append(pixel_vals)
     labels = process_png(png_file)
+    training_labels.append(labels)
 
-    optimizer.zero_grad()
-    # forward + backward + optimize
-    outputs = model(pixel_values=pixel_vals, labels=torch.tensor(labels))
-    loss, logits = outputs.loss, outputs.logits
+# define optimizer
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.00006)
+image_processor = SegformerImageProcessor(do_reduce_labels=True)
+model.to(device)
+# tune the model
+print('hi')
+model.train()
+for epoch in range(200):  # loop over the dataset multiple times
+    print("Epoch:", epoch)
+    for i in range(len(training_images)):
+        # get the inputs;
+        pixel_values = training_images[i].to(device)
+        labels = training_labels[i].to(device)
 
-    loss.backward()
-    optimizer.step()
+        # zero the parameter gradients
+        optimizer.zero_grad()
 
-    # evaluate
-    with torch.no_grad():
+        # forward + backward + optimize
+        outputs = model(pixel_values=pixel_values, labels=labels)
+        loss, logits = outputs.loss, outputs.logits
+
+        loss.backward()
+        optimizer.step()
+
+        # evaluate
+        with torch.no_grad():
           upsampled_logits = nn.functional.interpolate(logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
           predicted = upsampled_logits.argmax(dim=1)
 
           # note that the metric expects predictions + labels as numpy arrays
           metric.add_batch(predictions=predicted.detach().cpu().numpy(), references=labels.detach().cpu().numpy())
-
-    metrics = metric._compute(
+          metrics = metric._compute(
                   predictions=predicted.cpu(),
                   references=labels.cpu(),
                   num_labels=len(id2label),

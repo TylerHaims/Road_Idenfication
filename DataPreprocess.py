@@ -1,8 +1,8 @@
 # File to setup the image data to fine-tune the 
-
 from collections import defaultdict
 import os
 import re
+import tensorflow as tf
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,6 +15,9 @@ from torch import nn
 from sklearn.metrics import accuracy_score
 import evaluate
 metric = evaluate.load("mean_iou")
+from torch.utils.data import TensorDataset, DataLoader
+
+print('hi')
 
 # customizable id's
 road_labels = {
@@ -32,6 +35,7 @@ id2label = json.load(open(hf_hub_download(repo_id=repo_id, filename=filename, re
 id2label = {int(k): v for k, v in id2label.items()}
 label2id = {v: k for k, v in id2label.items()}
 
+print('hi2')
 # define model
 model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0",
                                                          num_labels=2,
@@ -39,6 +43,7 @@ model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0",
                                                          label2id=road_label2id,
 )
 
+print('hi3')
 # define the image processor
 image_processor = SegformerImageProcessor(do_reduce_labels=True)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -51,11 +56,11 @@ def process_png(filename):
     encoded_mask = np.zeros_like(binary_mask, dtype=np.int64)
     for label, class_name in road_labels.items():
         encoded_mask[binary_mask == label] = label
-    return encoded_mask
+    return torch.tensor(encoded_mask)
 
 # gonna see if we can train this thangggg
 # get all of the filenames separated
-path = '/Users/rorybeals/Downloads/Road Identification Data/train'
+path = '/Users/rorybeals/Downloads/Road Identification Data/train/'
 jpg_files = []
 png_files = []
 for file in os.listdir(path):
@@ -68,52 +73,73 @@ training_images = []
 training_labels = []
 
 data_dict = defaultdict(dict)
-for file in jpg_files:
+for file in os.listdir(path):
     num, type_ = file.split('_')
     data_dict[num][type_] = file
 
-
+# set up the training_images and training_labels lists of filenames
 for file in jpg_files:
-    # find the proper .png file
-    match = re.match(r'^(\d+)', file)
-    id = match.group()
-    for fil in png_files:
-        new_match = re.match(r'^(\d+)', fil)
-        new_id = new_match.group()
-        if id == new_id:
-            png_file = fil
-    file = "/Users/rorybeals/Downloads/Road Identification Data/train/" + file
-    png_file = "/Users/rorybeals/Downloads/Road Identification Data/train/" + png_file
-    image = Image.open(file)
-    pixel_vals = image_processor(image, return_tensors="pt").pixel_values.to(device)
-    training_images.append(pixel_vals)
-    labels = process_png(png_file)
-    training_labels.append(labels)
+    file_num = file.split('_')[0]
+    filename = path + '/' + file
+    training_images.append(filename)
+    png_image = data_dict[file_num]['mask.png']
+    png_filename = path + '/'+  png_image
+    training_labels.append(png_filename)
+    if (len(training_images) == 1000):
+        break
+
+processed_images = []
+processed_labels = []
+
+for image_filename, label_filename in zip(training_images, training_labels):
+    sat_image = Image.open(image_filename)
+    pixel_vals = image_processor(sat_image, return_tensors="pt").pixel_values.to(device)
+    processed_images.append(pixel_vals)
+    labels = process_png(png_filename)
+    processed_labels.append(labels)
+
+print('hi4')
+
+# Convert lists of tensors to PyTorch tensors
+processed_images_tensor = torch.stack(processed_images)
+processed_labels_tensor = torch.stack(processed_labels)
+
+dataset = TensorDataset(processed_images_tensor, processed_labels_tensor)
+dataloader = DataLoader(dataset, batch_size=2, shuffle=True)
+
+# set up some batches
+training_images_tensor = tf.convert_to_tensor(training_images)
+training_labels_tensor = tf.convert_to_tensor(training_labels)
+
+print('hi5')
 
 # define optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=0.00006)
 image_processor = SegformerImageProcessor(do_reduce_labels=True)
 model.to(device)
 # tune the model
-print('hi')
+print('hi6')
 model.train()
 for epoch in range(200):  # loop over the dataset multiple times
     print("Epoch:", epoch)
-    for i in range(len(training_images)):
+    for batch in dataloader:
         # get the inputs;
-        pixel_values = training_images[i].to(device)
-        labels = training_labels[i].to(device)
-
+        pixel_values, labels = batch
+        pixel_values = pixel_values.to(device)
+        pixel_values = pixel_values[:, 0, :, :, :]
+        labels = labels.to(device)
+        print('gabagoo')
         # zero the parameter gradients
         optimizer.zero_grad()
-
+        print('gabagoo2')
         # forward + backward + optimize
         outputs = model(pixel_values=pixel_values, labels=labels)
         loss, logits = outputs.loss, outputs.logits
+        print('gabagoo3')
 
         loss.backward()
         optimizer.step()
-
+        print('gabagoo4')
         # evaluate
         with torch.no_grad():
           upsampled_logits = nn.functional.interpolate(logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)

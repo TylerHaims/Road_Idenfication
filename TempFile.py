@@ -41,56 +41,80 @@ label2id = {v: k for k, v in id2label.items()}
 
 def process_png(filename):
     image = Image.open(filename)
+    
     binary_mask = np.array(image.convert("L"))
+
     binary_mask = np.where(binary_mask > 0, 1, 0)
+
     encoded_mask = np.zeros_like(binary_mask, dtype=np.int64)
+    
     for label, class_name in road_labels.items():
         encoded_mask[binary_mask == label] = label
+    # Display the original image
+    plt.figure(figsize=(8, 8))
+    plt.subplot(221)
+    plt.imshow(image)
+    plt.title('Original Image')
+
+    # Display the binary mask
+    plt.subplot(222)
+    plt.imshow(binary_mask, cmap='gray')
+    plt.title('Binary Mask')
+
+    # Display the encoded mask
+    plt.subplot(223)
+    plt.imshow(encoded_mask, cmap='jet')
+    plt.title('Encoded Mask')
+
+    plt.tight_layout()
+    plt.show()
     return encoded_mask
 
 
+png_image = '/Users/rorybeals/Downloads/Road Identification Data/train/104_mask.png'
+process_png(png_image)
 
-path = '/Users/rorybeals/Downloads/Road Identification Data/train'
-jpg_files = []
-png_files = []
-for file in os.listdir(path):
-    if file.endswith('.jpg'):
-        jpg_files.append(file)
-    else: png_files.append(file)
+# path = '/Users/rorybeals/Downloads/Road Identification Data/train'
+# jpg_files = []
+# png_files = []
+# for file in os.listdir(path):
+#     if file.endswith('.jpg'):
+#         jpg_files.append(file)
+#     else: png_files.append(file)
 
-# define our training data and labels
-training_images = []
-training_labels = []
+# # define our training data and labels
+# training_images = []
+# training_labels = []
 
-data_dict = defaultdict(dict)
-for file in os.listdir(path):
-    num, type_ = file.split('_')
-    # type_ = type_.split('.')[0]
-    data_dict[num][type_] = file
+# data_dict = defaultdict(dict)
+# for file in os.listdir(path):
+#     num, type_ = file.split('_')
+#     # type_ = type_.split('.')[0]
+#     data_dict[num][type_] = file
 
-print(data_dict['401242']['mask.png'])
+# print(data_dict['401242']['mask.png'])
 
-for file in jpg_files:
-    file_num = file.split('_')[0]
-    filename = path + '/' + file
-    training_images.append(filename)
-    png_image = data_dict[file_num]['mask.png']
-    png_filename = path + png_image
-    training_labels.append(png_filename)
+# for file in jpg_files:
+#     file_num = file.split('_')[0]
+#     filename = path + '/' + file
+#     training_images.append(filename)
+#     png_image = data_dict[file_num]['mask.png']
+#     png_filename = path + png_image
+#     training_labels.append(png_filename)
 
-    sat_image = Image.open(filename)
-    pixel_vals = image_processor(sat_image, return_tensors="pt").pixel_values.to(device)
-    training_images.append(pixel_vals)
-    png_image = data_dict[file_num]['mask.png']
-    png_filename = path + '/' + png_image
-    labels = process_png(png_filename)
-    training_labels.append(labels)
-    print(file)
-    if (len(training_images) == 1000):
-        break
+#     sat_image = Image.open(filename)
+#     pixel_vals = image_processor(sat_image, return_tensors="pt").pixel_values.to(device)
+#     training_images.append(pixel_vals)
+#     png_image = data_dict[file_num]['mask.png']
+#     png_filename = path + '/' + png_image
+#     labels = process_png(png_filename)
+#     training_labels.append(labels)
+#     print(file)
+#     if (len(training_images) == 1000):
+#         break
 
-tensor_list = [torch.tensor(arr) for arr in training_labels]
+# tensor_list = [torch.tensor(arr) for arr in training_labels]
 
 
-print(tensor_list[1])
-print(type(tensor_list[1]))
+# print(tensor_list[1])
+# print(type(tensor_list[1]))

@@ -129,10 +129,10 @@ def process_png(filename):
     image = Image.open(filename)
     binary_mask = np.array(image.convert("L"))
     binary_mask = np.where(binary_mask > 0, 1, 0)
-    encoded_mask = np.zeros_like(binary_mask, dtype=np.int64)
-    for label, class_name in road_labels.items():
-        encoded_mask[binary_mask == label] = label
-    return torch.tensor(encoded_mask)
+    # encoded_mask = np.zeros_like(binary_mask, dtype=np.int64)
+    # for label, class_name in road_labels.items():
+    #     encoded_mask[binary_mask == label] = label
+    return torch.tensor(binary_mask)
 
 # gonna see if we can train this thangggg
 # get all of the filenames separated
@@ -189,6 +189,25 @@ training_labels_tensor = tf.convert_to_tensor(training_labels)
 
 print('hi5')
 
+#adjust the loss function
+import torch
+import torch.nn as nn
+
+class WeightedCrossEntropyLoss(nn.Module):
+    def __init__(self, weight=None):
+        super(WeightedCrossEntropyLoss, self).__init__()
+        self.loss = nn.CrossEntropyLoss(weight=weight)
+
+    def forward(self, inputs, targets):
+        return self.loss(inputs, targets)
+
+# Assuming class 0 is more important than class 1
+weights = torch.tensor([1.0, 3.0])  # More weight for class 1
+
+criterion = WeightedCrossEntropyLoss(weight=weights)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
+
+
 # define optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
 image_processor = SegformerImageProcessor(do_reduce_labels=True)
@@ -196,7 +215,7 @@ model.to(device)
 # tune the model
 print('hi6')
 model.train()
-for epoch in range(2):  # loop over the dataset multiple times
+for epoch in range(5):  # loop over the dataset multiple times
     print("Epoch:", epoch)
     for batch in dataloader:
         print('batch running')
@@ -209,7 +228,14 @@ for epoch in range(2):  # loop over the dataset multiple times
         # optimizer.zero_grad()
         # forward + backward + optimize
         outputs = model(pixel_values=pixel_values, labels=labels)
-        loss, logits = outputs.loss, outputs.logits
+        logits = outputs.logits
+
+        logits = logits.permute(2, 1024, 1024, 2).contiguous()  # Reshape logits to (batch_size, height, width, num_classes)
+        logits = logits.view(-1, logits.shape[-1])  # Flatten logits to (batch_size * height * width, num_classes)
+
+        # Flatten labels to match logits for calculating loss
+        labels = labels.view(-1)  # Flatten labels to (batch_size * height * width)
+        loss = criterion(logits.reshape(-1, logits.shape[-1]), labels.view(-1))
 
         loss.backward()
         optimizer.step()

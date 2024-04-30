@@ -103,7 +103,7 @@ def ade_palette():
      
 predicted_segmentation_map = image_processor.post_process_semantic_segmentation(outputs, target_sizes=[image.size[::-1]])[0]
 predicted_segmentation_map = predicted_segmentation_map.cpu().numpy()
-print(predicted_segmentation_map)
+print(predicted_segmentation_map.shape)
 
 color_seg = np.zeros((predicted_segmentation_map.shape[0],
                       predicted_segmentation_map.shape[1], 3), dtype=np.uint8) # height, width, 3
@@ -201,7 +201,7 @@ class WeightedCrossEntropyLoss(nn.Module):
     def forward(self, inputs, targets):
         return self.loss(inputs, targets)
 
-# Assuming class 0 is more important than class 1
+# Assuming class 1 (road) is more important than class 0 (not road)
 weights = torch.tensor([1.0, 3.0])  # More weight for class 1
 
 criterion = WeightedCrossEntropyLoss(weight=weights)
@@ -225,17 +225,21 @@ for epoch in range(5):  # loop over the dataset multiple times
         pixel_values = pixel_values[:, 0, :, :, :]
         labels = labels.to(device)
         # zero the parameter gradients
-        # optimizer.zero_grad()
+        optimizer.zero_grad()
         # forward + backward + optimize
         outputs = model(pixel_values=pixel_values, labels=labels)
         logits = outputs.logits
 
-        logits = logits.permute(2, 1024, 1024, 2).contiguous()  # Reshape logits to (batch_size, height, width, num_classes)
-        logits = logits.view(-1, logits.shape[-1])  # Flatten logits to (batch_size * height * width, num_classes)
+        target_sizes = [image.size[::-1], image.size[::-1]]  # List of target sizes corresponding to each image in the batch
+        predicted_segmentation_map = image_processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)[0]
+        predicted_segmentation_map = tf.convert_to_tensor(predicted_segmentation_map.cpu())
+        numpy_version = predicted_segmentation_map.numpy()
+        torch_map = torch.from_numpy(numpy_version)
+        new_labels = labels.to(torch.int64)
 
-        # Flatten labels to match logits for calculating loss
-        labels = labels.view(-1)  # Flatten labels to (batch_size * height * width)
-        loss = criterion(logits.reshape(-1, logits.shape[-1]), labels.view(-1))
+        print(type(torch_map))
+        print(type(new_labels))
+        loss = criterion(torch_map, new_labels)
 
         loss.backward()
         optimizer.step()

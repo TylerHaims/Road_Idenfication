@@ -11,6 +11,7 @@ from PIL import Image
 from torch import nn
 from sklearn.metrics import accuracy_score
 import evaluate
+import cv2
 metric = evaluate.load("mean_iou")
 
 # customizable id's
@@ -38,8 +39,8 @@ model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0",
 
 
 # just kinda testing this out and figuring out if it works
-image = Image.open("/Users/rorybeals/Downloads/Road Identification Data/test/206_sat.jpg")
-png_image = Image.open("/Users/rorybeals/Downloads/Road Identification Data/train/562_mask.png")
+image = Image.open("/Users/tylerhaims/Downloads/RoadImages/test/206_sat.jpg")
+png_image = Image.open("/Users/tylerhaims/Downloads/RoadImages/train/562_mask.png")
 image_processor = SegformerImageProcessor(do_reduce_labels=True)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
@@ -98,15 +99,41 @@ print(predicted_segmentation_map)
 color_seg = np.zeros((predicted_segmentation_map.shape[0],
                       predicted_segmentation_map.shape[1], 3), dtype=np.uint8) # height, width, 3
 
-palette = np.array(ade_palette())
-for label, color in enumerate(palette):
-    color_seg[predicted_segmentation_map == label, :] = color
-# Convert to BGR
-color_seg = color_seg[..., ::-1]
 
-# Show image + mask
+#palette = np.array(ade_palette())
+#for label, color in enumerate(palette):
+    #color_seg[predicted_segmentation_map == label, :] = color
+# Convert to BGR
+    
+#color_seg = color_seg[..., ::-1]
+cv2.imwrite('image_output12.jpg', color_seg)
+
+# for row in image_RB:
+#    for pixel in row:
+#       if pixel[0] == 120 and pixel[1] == 120 and (pixel[2] == 180 or pixel[2] == 120):
+#          pixel[0] = 0
+#          pixel[1] = 0
+#          pixel[2] = 0
+        
+#       else:
+#          pixel[0] = 255
+#          pixel[1] = 255
+#          pixel[2] = 255
+        
+#cv2.imwrite('imageoutfinal.jpg', image_RB)
+
+
+      
+      
+
+
+
+#Show image + mask
 img = np.array(image) * 0.5 + color_seg * 0.5
+#this coverts the array of values into an 8 bit integer
+
 img = img.astype(np.uint8)
+print(img)
 
 plt.figure(figsize=(15, 10))
 plt.imshow(img)

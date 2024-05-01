@@ -54,6 +54,7 @@ image = Image.open("/Users/rorybeals/Downloads/Road Identification Data/test/206
 png_image = Image.open("/Users/rorybeals/Downloads/Road Identification Data/train/562_mask.png")
 model.to(device)
 pixel_vals = image_processor(image, return_tensors="pt").pixel_values.to(device)
+print(pixel_vals.shape)
 
 # forward pass
 with torch.no_grad():
@@ -210,59 +211,97 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
 
 # define optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
-image_processor = SegformerImageProcessor(do_reduce_labels=True)
+image_processor = SegformerImageProcessor(do_reduce_labels=False)
 model.to(device)
 # tune the model
 print('hi6')
+
+
+
+
+
+
 model.train()
 for epoch in range(5):  # loop over the dataset multiple times
     print("Epoch:", epoch)
     for batch in dataloader:
-        print('batch running')
-        # get the inputs;
-        pixel_values, labels = batch
-        pixel_values = pixel_values.to(device)
-        pixel_values = pixel_values[:, 0, :, :, :]
-        labels = labels.to(device)
-        # zero the parameter gradients
         optimizer.zero_grad()
-        # forward + backward + optimize
-        outputs = model(pixel_values=pixel_values, labels=labels)
-        logits = outputs.logits
+        pixel_values, labels = batch
+        pixel_values = pixel_values[:, 0, :, :, :]
+        pixel_values, labels = pixel_values.to(device), labels.to(device)
 
-        target_sizes = [image.size[::-1], image.size[::-1]]  # List of target sizes corresponding to each image in the batch
-        predicted_segmentation_map = image_processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)[0]
-        predicted_segmentation_map = tf.convert_to_tensor(predicted_segmentation_map.cpu())
-        numpy_version = predicted_segmentation_map.numpy()
-        torch_map = torch.from_numpy(numpy_version)
-        new_labels = labels.to(torch.int64)
-
-        print(type(torch_map))
-        print(type(new_labels))
-        loss = criterion(torch_map, new_labels)
+        outputs = model(pixel_values=pixel_values)
+        loss = criterion(outputs, labels)
 
         loss.backward()
         optimizer.step()
-        print('gabagoo4')
-        # evaluate
-        with torch.no_grad():
-          upsampled_logits = nn.functional.interpolate(logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
-          predicted = upsampled_logits.argmax(dim=1)
 
-          # note that the metric expects predictions + labels as numpy arrays
-          metric.add_batch(predictions=predicted.detach().cpu().numpy(), references=labels.detach().cpu().numpy())
-          metrics = metric._compute(
-                  predictions=predicted.cpu(),
-                  references=labels.cpu(),
-                  num_labels=len(id2label),
-                  ignore_index=255,
-                  reduce_labels=False, # we've already reduced the labels ourselves
-              )
+        # Additional evaluation or logging code here (e.g., calculate metrics)
+
+        print(f"Epoch {epoch + 1}, Loss: {loss.item()}")
+        # print('batch running')
+        # # get the inputs;
+        # pixel_values, labels = batch
+        # pixel_values = pixel_values.to(device)
+        # pixel_values = pixel_values[:, 0, :, :, :]
+        # print(pixel_values[0].shape)
+        # print(pixel_values[0])
+        # print(pixel_values[1])
+        # labels = labels.to(device)
+        # # zero the parameter gradients
+        # optimizer.zero_grad()
+        # # forward + backward + optimize
+        # outputs = model(pixel_values=pixel_values, labels=labels)
+        # logits = outputs.logits
+
+        # output1 = model(pixel_values=pixel_values[0].unsqueeze(0))
+        # output2 = model(pixel_values=pixel_values[1].unsqueeze(0))
+
+        # target_sizes = [image.size[::-1]]  # List of target sizes corresponding to each image in the batch
+        # predicted_segmentation_map1 = image_processor.post_process_semantic_segmentation(output1, target_sizes=target_sizes)[0]
+        # predicted_segmentation_map2 = image_processor.post_process_semantic_segmentation(output2, target_sizes=target_sizes)[0]
+        # predicted_segmentation_map1 = tf.convert_to_tensor(predicted_segmentation_map1.cpu())
+        # predicted_segmentation_map2 = tf.convert_to_tensor(predicted_segmentation_map2.cpu())
+        # numpy_version1 = predicted_segmentation_map1.numpy()
+        # numpy_version2 = predicted_segmentation_map2.numpy()
+        # torch_map1 = torch.from_numpy(numpy_version1)
+        # torch_map2 = torch.from_numpy(numpy_version2)
+        # combined_tensor = torch.stack([torch_map1, torch_map2], dim=0)
+        # print(combined_tensor.shape)
+
+        # # torch_map = torch_map.to(torch.float32)
+        # new_labels = labels.to(torch.float64)
+        # #new_labels = new_labels.to(torch.long)  # Convert to long (torch.int64)
+
+        # # print(type(torch_map))
+        # # print(torch_map.shape)
+        # # print(type(new_labels))
+        # # print(new_labels.shape)
+        # # reshaped_tensor = torch_map.view(2, 1024, 1024)
+        # loss = criterion(combined_tensor, new_labels)
+
+        # loss.backward()
+        # optimizer.step()
+        # print('gabagoo4')
+        # # evaluate
+        # with torch.no_grad():
+        #   upsampled_logits = nn.functional.interpolate(logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
+        #   predicted = upsampled_logits.argmax(dim=1)
+
+        #   # note that the metric expects predictions + labels as numpy arrays
+        #   metric.add_batch(predictions=predicted.detach().cpu().numpy(), references=labels.detach().cpu().numpy())
+        #   metrics = metric._compute(
+        #           predictions=predicted.cpu(),
+        #           references=labels.cpu(),
+        #           num_labels=len(id2label),
+        #           ignore_index=255,
+        #           reduce_labels=False, # we've already reduced the labels ourselves
+        #       )
         print('batch over')
 
-    print("Loss:", loss.item())
-    print("Mean_iou:", metrics["mean_iou"])
-    print("Mean accuracy:", metrics["mean_accuracy"])
+    # print("Loss:", loss.item())
+    # print("Mean_iou:", metrics["mean_iou"])
+    # print("Mean accuracy:", metrics["mean_accuracy"])
 
 # just kinda testing this out and figuring out if it works
 image = Image.open("/Users/rorybeals/Downloads/Road Identification Data/test/206_sat.jpg")
